@@ -19,7 +19,7 @@ import { DEFAULT_HEADER, PLACEHOLDERS, fillPlaceholders, renderMarkdown } from '
 import { serif } from './theme.js';
 
 const proseSx = {
-  textAlign: 'center',
+  textAlign: 'left',
   overflowWrap: 'anywhere',
   '& > :first-child': { mt: 0 },
   '& > :last-child': { mb: 0 },
@@ -27,12 +27,16 @@ const proseSx = {
     fontFamily: serif,
     fontWeight: 560,
     letterSpacing: '-0.015em',
-    lineHeight: 1.08,
-    fontSize: { xs: '2.4rem', md: '3.6rem' },
-    m: '0.15em 0 0.3em',
+    lineHeight: 1.15,
+    fontSize: { xs: '1.8rem', sm: '2.1rem', md: '2.6rem' },
+    m: '0.15em 0 0.35em',
+    // One line on tablets and up; phones still wrap rather than cut the title off.
+    whiteSpace: { sm: 'nowrap' },
+    overflow: { sm: 'hidden' },
+    textOverflow: { sm: 'ellipsis' },
   },
-  '& h2': { fontFamily: serif, fontWeight: 560, fontSize: { xs: '1.6rem', md: '2.1rem' }, lineHeight: 1.2, m: '0.8em 0 0.4em' },
-  '& h3': { fontFamily: serif, fontWeight: 600, fontSize: { xs: '1.25rem', md: '1.45rem' }, m: '0.8em 0 0.4em' },
+  '& h2': { fontFamily: serif, fontWeight: 560, fontSize: { xs: '1.35rem', md: '1.6rem' }, lineHeight: 1.25, m: '0.8em 0 0.4em' },
+  '& h3': { fontFamily: serif, fontWeight: 600, fontSize: { xs: '1.1rem', md: '1.25rem' }, m: '0.8em 0 0.4em' },
   '& h4, & h5, & h6': {
     fontSize: '0.75rem',
     fontWeight: 600,
@@ -41,25 +45,35 @@ const proseSx = {
     color: 'text.secondary',
     m: '0 0 0.6em',
   },
-  '& p': { color: 'text.secondary', fontSize: '1.02rem', lineHeight: 1.65, maxWidth: '68ch', mx: 'auto', my: '0.6em' },
+  '& * + h4, & * + h5, & * + h6': { mt: '1.6em' },
+  '& p': { color: 'text.secondary', fontSize: '0.95rem', lineHeight: 1.65, my: '0.6em' },
   '& strong': { color: 'text.primary', fontWeight: 600 },
   '& a': { color: 'primary.main', textUnderlineOffset: '3px' },
-  '& ul, & ol': { display: 'inline-block', textAlign: 'left', color: 'text.secondary', my: '0.6em', pl: 3 },
+  '& ul, & ol': { color: 'text.secondary', my: '0.6em', pl: 3 },
   '& li': { my: 0.25 },
   '& blockquote': {
     fontFamily: serif,
     fontStyle: 'italic',
-    fontSize: '1.25rem',
+    fontSize: '1.1rem',
     color: 'text.primary',
-    maxWidth: '50ch',
-    mx: 'auto',
+    mx: 0,
+    pl: 2,
+    borderLeft: '3px solid',
+    borderColor: 'primary.main',
     my: '1em',
     '& p': { color: 'inherit', fontSize: 'inherit' },
   },
-  '& hr': { border: 0, height: '1px', width: 72, bgcolor: 'divider', mx: 'auto', my: 3 },
+  '& hr': { border: 0, height: '1px', width: 72, bgcolor: 'divider', mx: 0, my: 3 },
   '& img': { maxWidth: '100%', height: 'auto', borderRadius: 1 },
   '& code': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.88em', px: 0.5, borderRadius: 0.5, bgcolor: 'action.hover' },
-  '& table': { mx: 'auto', borderCollapse: 'collapse', color: 'text.secondary', '& th, & td': { px: 1.5, py: 0.5, borderBottom: '1px solid', borderColor: 'divider' } },
+  // A table renders as a statistics strip: big numbers in the first row, labels beneath.
+  '& table': {
+    borderCollapse: 'collapse',
+    my: 3,
+    '& th, & td': { textAlign: 'left !important', verticalAlign: 'top', pr: { xs: 3, md: 7 }, border: 0 },
+    '& th': { fontFamily: serif, fontWeight: 560, fontSize: { xs: '1.9rem', md: '2.5rem' }, lineHeight: 1, color: 'text.primary', pb: 1 },
+    '& td': { fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'text.secondary', maxWidth: 180 },
+  },
 };
 
 export function HeaderMarkdown({ markdown, vars, sx }) {

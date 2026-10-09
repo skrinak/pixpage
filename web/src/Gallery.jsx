@@ -74,9 +74,8 @@ function SearchField({ value, onChange }) {
   );
 }
 
-function Card({ item, route, editing, onEdit, onKeyword }) {
+function Card({ item, route, editing, onEdit }) {
   const size = fit(item.thumb.w, item.thumb.h, THUMB_W, THUMB_H);
-  const kws = item.keywords || [];
   return (
     <Box
       id={`card-${item.id}`}
@@ -164,14 +163,6 @@ function Card({ item, route, editing, onEdit, onKeyword }) {
             </Button>
           )
         )}
-        {kws.length > 0 && (
-          <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.75, justifyContent: 'center' }}>
-            {kws.slice(0, 5).map((kw) => (
-              <Chip key={kw} label={kw} size="small" variant="outlined" onClick={() => onKeyword(kw)} />
-            ))}
-            {kws.length > 5 && <Chip size="small" label={`+${kws.length - 5}`} sx={{ opacity: 0.7 }} />}
-          </Box>
-        )}
       </Box>
     </Box>
   );
@@ -249,8 +240,8 @@ export default function Gallery({ title, header, headerVars, onEditHeader, onHel
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="xl" sx={{ pt: { xs: 5, md: 8 }, pb: { xs: 3, md: 4 }, textAlign: 'center' }}>
-        <Box component="header" sx={{ maxWidth: 960, mx: 'auto' }}>
+      <Container maxWidth="xl" sx={{ pt: { xs: 5, md: 8 }, pb: { xs: 3, md: 4 }, px: { sm: 4, md: 6 } }}>
+        <Box component="header" sx={{ maxWidth: 1100 }}>
           <HeaderMarkdown markdown={header} vars={headerVars} />
         </Box>
         {editing && (
@@ -259,7 +250,7 @@ export default function Gallery({ title, header, headerVars, onEditHeader, onHel
           </Button>
         )}
         {cloud.length > 0 && (
-          <Box sx={{ mt: 3, display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'center', maxWidth: 900, mx: 'auto' }}>
+          <Box sx={{ mt: 3, display: 'flex', flexWrap: 'wrap', gap: 1, maxWidth: 900 }}>
             {cloud.map(([kw, n]) => (
               <Chip
                 key={kw}
@@ -273,7 +264,7 @@ export default function Gallery({ title, header, headerVars, onEditHeader, onHel
           </Box>
         )}
         {filtered && (
-          <Box sx={{ mt: 3, display: 'flex', gap: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Box sx={{ mt: 3, display: 'flex', gap: 1, alignItems: 'center' }}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               {items.length} of {allItems.length} shown
             </Typography>
@@ -301,7 +292,7 @@ export default function Gallery({ title, header, headerVars, onEditHeader, onHel
             }}
           >
             {items.slice(0, limit).map((item) => (
-              <Card key={item.id} item={item} route={route} editing={editing} onEdit={onEdit} onKeyword={toggleKeyword} />
+              <Card key={item.id} item={item} route={route} editing={editing} onEdit={onEdit} />
             ))}
           </Box>
         )}

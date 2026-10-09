@@ -61,6 +61,7 @@ const MARKDOWN = [
   ['- item', 'Bulleted list (1. for numbered)'],
   ['> quote', 'Pull quote'],
   ['---', 'Short divider line'],
+  ['| 110 | 75% |  (table)', 'Statistics strip: numbers on top, labels below'],
   ['blank line', 'Starts a new paragraph'],
 ];
 
