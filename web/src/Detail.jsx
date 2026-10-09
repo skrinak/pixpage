@@ -18,7 +18,7 @@ import OpenInNew from '@mui/icons-material/OpenInNew';
 import { Print } from './Print.jsx';
 import { ColorModeButton, EditLock, HelpButton, barSx } from './Toolbar.jsx';
 import { buildHash, navigate } from './route.js';
-import { formatDateTime, formatDuration, keywordQuery } from './util.js';
+import { formatDateTime, formatDuration } from './util.js';
 
 const isTyping = (el) => el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
 
@@ -27,10 +27,10 @@ function NavArrow({ item, route, dir }) {
   return (
     <IconButton
       component="a"
-      href={item ? buildHash({ view: 'detail', id: item.id, q: route.q, t: route.t }) : undefined}
+      href={item ? buildHash({ view: 'detail', id: item.id, q: route.q, t: route.t, k: route.k }) : undefined}
       onClick={(e) => {
         e.preventDefault();
-        if (item) navigate({ view: 'detail', id: item.id, q: route.q, t: route.t }, { replace: true });
+        if (item) navigate({ view: 'detail', id: item.id, q: route.q, t: route.t, k: route.k }, { replace: true });
       }}
       disabled={!item}
       aria-label={dir === 'prev' ? 'Previous' : 'Next'}
@@ -91,8 +91,8 @@ export default function Detail({ item, index, list, route, api, editing, onUnloc
   const prev = list[index - 1];
   const next = list[index + 1];
   const touch = useRef(null);
-  const backHref = buildHash({ view: 'gallery', q: route.q, t: route.t });
-  const go = (it) => it && navigate({ view: 'detail', id: it.id, q: route.q, t: route.t }, { replace: true });
+  const backHref = buildHash({ view: 'gallery', q: route.q, t: route.t, k: route.k });
+  const go = (it) => it && navigate({ view: 'detail', id: it.id, q: route.q, t: route.t, k: route.k }, { replace: true });
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -223,7 +223,7 @@ export default function Detail({ item, index, list, route, api, editing, onUnloc
           {item.keywords?.length > 0 && (
             <Box sx={{ mt: 3, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
               {item.keywords.map((kw) => (
-                <Chip key={kw} label={kw} variant="outlined" component="a" clickable href={buildHash({ view: 'gallery', q: keywordQuery(kw) })} />
+                <Chip key={kw} label={kw} variant="outlined" component="a" clickable href={buildHash({ view: 'gallery', k: [kw] })} />
               ))}
             </Box>
           )}

@@ -97,7 +97,7 @@ export default function App() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [items]);
 
-  const filtered = useMemo(() => filterItems(items, route.q, route.t), [items, route.q, route.t]);
+  const filtered = useMemo(() => filterItems(items, route.q, route.t, route.k), [items, route.q, route.t, route.k]);
   const header = data?.gallery?.header || '';
   const headerVars = useMemo(() => {
     const photos = items.filter((it) => it.type === 'photo').length;

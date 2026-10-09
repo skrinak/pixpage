@@ -10,7 +10,7 @@ import LockOpen from '@mui/icons-material/LockOpen';
 import HelpOutlineRounded from '@mui/icons-material/HelpOutlineRounded';
 
 export const barSx = (theme) => ({
-  bgcolor: 'rgba(214, 236, 250, 0.8)',
+  bgcolor: 'rgba(220, 227, 232, 0.82)',
   color: 'text.primary',
   backdropFilter: 'saturate(160%) blur(16px)',
   borderBottom: '1px solid',

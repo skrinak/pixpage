@@ -359,7 +359,7 @@ def install_frontend(out: Path, title: str) -> None:
 <link rel="stylesheet" href="app.css?v={version}">
 <script src="data/media.js"></script>
 <script src="data/captions.js"></script>
-<style>body{{margin:0;background:#cce6f6}}@media (prefers-color-scheme:dark){{body{{background:#1a1917}}}}</style>
+<style>body{{margin:0;background:#d3dce2}}@media (prefers-color-scheme:dark){{body{{background:#1a1917}}}}</style>
 </head>
 <body>
 <div id="root"></div>

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 
 // Hash routes keep the site fully static (works from S3 or file://):
-//   #/?q=boat&t=video      gallery, optionally filtered
-//   #/m/<id>?q=boat         detail page; prev/next walk the filtered list
+//   #/?q=boat&t=video&k=Intel&k=KX   gallery: search words (all must match), media type,
+//                                     and tags (k, any may match)
+//   #/m/<id>?q=boat                   detail page; prev/next walk the filtered list
 export function parseHash(hash = window.location.hash) {
   const raw = hash.replace(/^#/, '') || '/';
   const [path, qs = ''] = raw.split('?');
@@ -13,13 +14,15 @@ export function parseHash(hash = window.location.hash) {
     id: m ? decodeURIComponent(m[1]) : null,
     q: params.get('q') || '',
     t: params.get('t') || 'all',
+    k: params.getAll('k').filter(Boolean),
   };
 }
 
-export function buildHash({ view = 'gallery', id = null, q = '', t = 'all' }) {
+export function buildHash({ view = 'gallery', id = null, q = '', t = 'all', k = [] }) {
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (t && t !== 'all') params.set('t', t);
+  for (const kw of k) params.append('k', kw);
   const qs = params.toString();
   const path = view === 'detail' && id ? `/m/${encodeURIComponent(id)}` : '/';
   return `#${path}${qs ? `?${qs}` : ''}`;

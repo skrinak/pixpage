@@ -61,10 +61,13 @@ export function haystack(item) {
     .toLowerCase();
 }
 
-export function filterItems(items, q, t) {
+// Search words must all match (AND); selected tags widen the set (OR: any tag matches).
+export function filterItems(items, q, t, k = []) {
   const tokens = tokenize(q);
+  const tags = new Set(k.map((kw) => kw.toLowerCase()));
   return items.filter((it) => {
     if (t !== 'all' && it.type !== t) return false;
+    if (tags.size && !(it.keywords || []).some((kw) => tags.has(kw.toLowerCase()))) return false;
     if (!tokens.length) return true;
     const hay = it._hay;
     return tokens.every((tok) => hay.includes(tok));

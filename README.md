@@ -78,8 +78,10 @@ Given the folder of media, the script:
 
 - **Header:** an editable Markdown introduction. By default it shows the date range, the
   folder name and the photo/video count.
-- **Keyword cloud:** the most-used keywords with counts. Click one to filter; click it again to
-  remove the filter.
+- **Filter by tag:** the most-used tags with counts, under a short "Filter by tag" label. Click a
+  tag to show only its photos. Selecting more tags adds their photos too: a photo with *any*
+  selected tag is shown, so Intel + Audience shows both sets. Click a tag again to remove it.
+  Tags combine with search, where the search words narrow the tagged photos.
 - **Prints:** each thumbnail sits in a white border with a soft shadow and a slight tilt, like
   photos on a table. Hovering straightens and lifts it. The first two lines of the description
   appear underneath. Videos show a ▶ badge with their duration.
@@ -91,7 +93,7 @@ Given the folder of media, the script:
 ### Detail page
 
 - Large photo, or a video player with seeking.
-- The full description, keywords (click one to search) and details: date and time taken, camera,
+- The full description, tags (click one to filter the gallery by it) and details: date and time taken, camera,
   lens, exposure, original size, file name, and location with a map link.
 - **Previous / next** with the arrow buttons, the ← → keys, or a swipe on touch screens. When a
   search is active, previous/next stays within the results.

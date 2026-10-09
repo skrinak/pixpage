@@ -137,7 +137,8 @@ export function HelpDrawer({ open, section, onClose }) {
           <ul>
             <li>Search looks through descriptions, keywords, file names, dates and camera names. Every word must match.</li>
             <li>Put phrases in quotes: <Code>"demo day"</Code>.</li>
-            <li>Click a keyword chip to filter by it. Click it again in the keyword cloud to remove it.</li>
+            <li>Click a tag above the photos to show only photos with that tag. Selecting more tags adds their photos too (a photo with <i>any</i> selected tag is shown); click a tag again to remove it.</li>
+            <li>Tags and search combine: with tags selected, the search words narrow the tagged photos.</li>
             <li>On a filtered list, ← and → move only through the results.</li>
           </ul>
         </Section>

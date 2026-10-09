@@ -18,7 +18,7 @@ import { Print, VideoBadge, fit } from './Print.jsx';
 import { ColorModeButton, EditLock, HelpButton, barSx } from './Toolbar.jsx';
 import { HeaderMarkdown } from './Header.jsx';
 import { buildHash, navigate } from './route.js';
-import { keywordQuery, tilt, tokenize } from './util.js';
+import { tilt } from './util.js';
 
 // Thumbnail display box — identical to the original iPhoto gallery (360 × 240).
 const THUMB_W = 360;
@@ -94,7 +94,7 @@ function Card({ item, route, editing, onEdit }) {
       >
         <Print
           component="a"
-          href={buildHash({ view: 'detail', id: item.id, q: route.q, t: route.t })}
+          href={buildHash({ view: 'detail', id: item.id, q: route.q, t: route.t, k: route.k })}
           rotate={tilt(item.id)}
           interactive
           aria-label={item.description || item.name}
@@ -169,7 +169,7 @@ function Card({ item, route, editing, onEdit }) {
 }
 
 export default function Gallery({ title, header, headerVars, onEditHeader, onHelp, allItems, items, keywordCounts, route, api, editing, onUnlock, onLock, onEdit, focusId }) {
-  const setRoute = (patch) => navigate({ view: 'gallery', q: route.q, t: route.t, ...patch }, { replace: true });
+  const setRoute = (patch) => navigate({ view: 'gallery', q: route.q, t: route.t, k: route.k, ...patch }, { replace: true });
   const focusIndex = focusId ? items.findIndex((it) => it.id === focusId) : -1;
   const [limit, setLimit] = useState(Math.max(PAGE, focusIndex + PAGE));
   const sentinel = useRef(null);
@@ -191,17 +191,13 @@ export default function Gallery({ title, header, headerVars, onEditHeader, onHel
 
   const photos = allItems.filter((it) => it.type === 'photo').length;
   const videos = allItems.length - photos;
-  const active = new Set(tokenize(route.q));
-  const toggleKeyword = (kw) => {
-    const tok = kw.toLowerCase();
-    if (active.has(tok)) {
-      setRoute({ q: tokenize(route.q).filter((t) => t !== tok).map(keywordQuery).join(' ') });
-    } else {
-      setRoute({ q: [route.q.trim(), keywordQuery(kw)].filter(Boolean).join(' ') });
-    }
-  };
+  const active = new Set(route.k.map((kw) => kw.toLowerCase()));
+  const toggleKeyword = (kw) =>
+    setRoute({
+      k: active.has(kw.toLowerCase()) ? route.k.filter((x) => x.toLowerCase() !== kw.toLowerCase()) : [...route.k, kw],
+    });
   const cloud = keywordCounts.slice(0, 24);
-  const filtered = route.q || route.t !== 'all';
+  const filtered = route.q || route.t !== 'all' || route.k.length > 0;
 
   return (
     <>
@@ -250,7 +246,15 @@ export default function Gallery({ title, header, headerVars, onEditHeader, onHel
           </Button>
         )}
         {cloud.length > 0 && (
-          <Box sx={{ mt: 3, display: 'flex', flexWrap: 'wrap', gap: 1, maxWidth: 900 }}>
+          <Typography component="div" variant="body2" sx={{ mt: 4, mb: 1.25, color: 'text.secondary' }}>
+            <Box component="span" sx={{ fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '0.72rem', mr: 1 }}>
+              Filter by tag
+            </Box>
+            Click a tag to show only photos with that tag. Select more tags to add their photos too; click a tag again to remove it.
+          </Typography>
+        )}
+        {cloud.length > 0 && (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, maxWidth: 900 }}>
             {cloud.map(([kw, n]) => (
               <Chip
                 key={kw}
@@ -268,7 +272,7 @@ export default function Gallery({ title, header, headerVars, onEditHeader, onHel
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               {items.length} of {allItems.length} shown
             </Typography>
-            <Button size="small" onClick={() => setRoute({ q: '', t: 'all' })}>
+            <Button size="small" onClick={() => setRoute({ q: '', t: 'all', k: [] })}>
               Clear filters
             </Button>
           </Box>

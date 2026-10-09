@@ -16,7 +16,7 @@ export const theme = createTheme({
       palette: {
         primary: { main: '#2c5f5d' },
         secondary: { main: '#b5562f' },
-        background: { default: '#cce6f6', paper: '#f7fbfe' },
+        background: { default: '#d3dce2', paper: '#f7fbfe' },
         text: { primary: '#1d2630', secondary: '#4b5a68' },
         divider: 'rgba(25, 60, 95, 0.14)',
       },
@@ -49,7 +49,7 @@ export const theme = createTheme({
         html: { scrollPaddingTop: 96 },
         body: {
           minHeight: '100vh',
-          backgroundColor: '#cce6f6',
+          backgroundColor: '#d3dce2',
           backgroundImage: `${GRAIN}, radial-gradient(ellipse at 50% 0%, rgba(255,255,255,.55), transparent 60%)`,
           backgroundAttachment: 'fixed',
           ...theme.applyStyles('dark', {
