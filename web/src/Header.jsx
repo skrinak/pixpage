@@ -168,7 +168,7 @@ export function HeaderDialog({ open, markdown, vars, onClose, onSave, onHelp }) 
         borderRadius: 2,
         border: '1px solid',
         borderColor: 'divider',
-        bgcolor: '#ebe5da',
+        bgcolor: '#cce6f6',
         px: { xs: 2, md: 4 },
         py: { xs: 4, md: 6 },
         minHeight: 240,

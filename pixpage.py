@@ -24,10 +24,16 @@ AWS SSM Parameter Store:
         --overwrite --value 'your-password'
 
 (PIXPAGE_EDIT_PASSWORD, if set, overrides SSM — handy offline.)
+
+Publish (build, upload to S3, refresh CloudFront, then exit):
+
+    uv run pixpage.py ~/Pictures/Oct6 --publish s3://bucket/path   # first time
+    uv run pixpage.py ~/Pictures/Oct6 --publish                    # reuses the saved target
 """
 
 from __future__ import annotations
 
+import argparse
 import hmac
 import json
 import mimetypes
@@ -353,7 +359,7 @@ def install_frontend(out: Path, title: str) -> None:
 <link rel="stylesheet" href="app.css?v={version}">
 <script src="data/media.js"></script>
 <script src="data/captions.js"></script>
-<style>body{{margin:0;background:#ebe5da}}@media (prefers-color-scheme:dark){{body{{background:#1a1917}}}}</style>
+<style>body{{margin:0;background:#cce6f6}}@media (prefers-color-scheme:dark){{body{{background:#1a1917}}}}</style>
 </head>
 <body>
 <div id="root"></div>
@@ -706,14 +712,126 @@ def watch_source(src: Path, site: Site) -> None:
             log(f"rebuild failed: {e}")
 
 
+
+# --------------------------------------------------------------------------- publish
+
+# Old S3 regions use "s3-website-<region>", newer ones "s3-website.<region>".
+WEBSITE_DASH_REGIONS = {"us-east-1", "us-west-1", "us-west-2", "eu-west-1", "ap-southeast-1",
+                        "ap-southeast-2", "ap-northeast-1", "sa-east-1", "us-gov-west-1"}
+
+
+def aws(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run(["aws", *args], capture_output=True, text=True, check=check)
+
+
+def aws_json(*args: str):
+    res = aws(*args, "--output", "json", check=False)
+    if res.returncode != 0:
+        return None
+    return json.loads(res.stdout or "null")
+
+
+def parse_s3_url(url: str) -> tuple[str, str]:
+    m = re.fullmatch(r"s3://([^/]+)/?(.*?)/*", url.strip())
+    if not m:
+        sys.exit(f"Not an S3 URL: {url} (expected s3://bucket/path)")
+    return m.group(1), m.group(2)
+
+
+def bucket_region(bucket: str) -> str:
+    loc = aws_json("s3api", "get-bucket-location", "--bucket", bucket)
+    if loc is None:
+        sys.exit(f"Can't read bucket {bucket} — check the name and your AWS credentials.")
+    region = loc.get("LocationConstraint") or "us-east-1"
+    return "eu-west-1" if region == "EU" else region
+
+
+def acls_enabled(bucket: str, region: str) -> bool:
+    ctl = aws_json("s3api", "get-bucket-ownership-controls", "--bucket", bucket, "--region", region)
+    rules = (ctl or {}).get("OwnershipControls", {}).get("Rules", [])
+    return not any(r.get("ObjectOwnership") == "BucketOwnerEnforced" for r in rules)
+
+
+def sync(src: Path, dst: str, region: str, acl: bool, *extra: str) -> tuple[int, int]:
+    """aws s3 sync; returns (uploaded, deleted) counts."""
+    cmd = ["s3", "sync", str(src), dst, "--region", region, "--no-progress", *extra]
+    if acl:
+        cmd += ["--acl", "public-read"]
+    res = aws(*cmd, check=False)
+    if res.returncode != 0:
+        sys.exit(f"upload failed:\n{(res.stderr or res.stdout).strip()}")
+    lines = res.stdout.splitlines()
+    return sum(ln.startswith("upload:") for ln in lines), sum(ln.startswith("delete:") for ln in lines)
+
+
+def cloudfront_targets(bucket: str, prefix: str) -> list[tuple[str, str, str]]:
+    """Distributions whose origin is this bucket: (id, https base URL, path to invalidate)."""
+    found = []
+    for dist in (aws_json("cloudfront", "list-distributions") or {}).get("DistributionList", {}).get("Items", []) or []:
+        if not dist.get("Enabled"):
+            continue
+        for origin in dist.get("Origins", {}).get("Items", []):
+            if not origin["DomainName"].startswith(f"{bucket}.s3"):
+                continue
+            origin_path = origin.get("OriginPath", "").strip("/")
+            if origin_path and not (prefix == origin_path or prefix.startswith(origin_path + "/")):
+                continue
+            path = prefix[len(origin_path):].strip("/")
+            domain = (dist.get("Aliases", {}).get("Items") or [dist["DomainName"]])[0]
+            found.append((dist["Id"], f"https://{domain}/{path}/" if path else f"https://{domain}/", f"/{path}/*" if path else "/*"))
+            break
+    return found
+
+
+def publish(out: Path, target: str) -> None:
+    if not shutil.which("aws"):
+        sys.exit("The AWS CLI is required to publish (brew install awscli).")
+    bucket, prefix = parse_s3_url(target)
+    dst = f"s3://{bucket}/{prefix}".rstrip("/")
+    region = bucket_region(bucket)
+    acl = acls_enabled(bucket, region)
+    log(f"publishing to {dst}  (region {region}{', public-read ACL' if acl else ''})")
+
+    common = ["--exclude", ".DS_Store", "--exclude", "*.tmp"]
+    # Photos and video: cache for a day. --delete only here, so removed media disappear
+    # without any risk to other files under the prefix.
+    up, gone = sync(out / "media", f"{dst}/media", region, acl, *common, "--delete",
+                    "--cache-control", "public, max-age=86400")
+    log(f"  media   {up} uploaded, {gone} removed")
+    up, _ = sync(out / "fonts", f"{dst}/fonts", region, acl, *common, "--content-type", "font/woff2",
+                 "--cache-control", "public, max-age=31536000, immutable")
+    log(f"  fonts   {up} uploaded")
+    # Page, app bundle, data and header assets: always revalidated, so edits show at once.
+    up, _ = sync(out, dst, region, acl, *common, "--exclude", "media/*", "--exclude", "fonts/*",
+                 "--exclude", ".pixpage/*", "--cache-control", "no-cache")
+    log(f"  site    {up} uploaded (page, app, data, assets)")
+
+    if aws_json("s3api", "get-bucket-website", "--bucket", bucket, "--region", region) is not None:
+        host = f"s3-website-{region}" if region in WEBSITE_DASH_REGIONS else f"s3-website.{region}"
+        log(f"website http://{bucket}.{host}.amazonaws.com/{prefix + '/' if prefix else ''}")
+    for dist_id, url, path in cloudfront_targets(bucket, prefix):
+        res = aws("cloudfront", "create-invalidation", "--distribution-id", dist_id, "--paths", path,
+                  "--query", "Invalidation.Id", "--output", "text", check=False)
+        if res.returncode == 0:
+            log(f"https   {url}  (CloudFront {dist_id} refreshed)")
+        else:
+            log(f"https   {url}  (CloudFront {dist_id}: refresh failed — {res.stderr.strip()})")
+
 # --------------------------------------------------------------------------- main
 
 
 def main() -> None:
-    if len(sys.argv) != 2 or sys.argv[1] in ("-h", "--help"):
-        print(__doc__.strip())
-        sys.exit(0 if len(sys.argv) == 2 else 2)
-    src = Path(sys.argv[1]).expanduser().resolve()
+    parser = argparse.ArgumentParser(
+        prog="pixpage.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("folder", help="folder of photos and videos")
+    parser.add_argument(
+        "--publish", nargs="?", const="", metavar="S3_URL",
+        help="build, upload to S3 (e.g. s3://bucket/path), refresh CloudFront, then exit; "
+        "without a URL, reuse the last one",
+    )
+    args = parser.parse_args()
+    src = Path(args.folder).expanduser().resolve()
     if not src.is_dir():
         sys.exit(f"Not a folder: {src}")
     out = SITES_ROOT / src.name
@@ -730,10 +848,19 @@ def main() -> None:
     install_frontend(out, src.name)
     builder = Builder(src, out)
     site = Site(out, builder)
-    if site.password.get() is None:
+    if args.publish is None and site.password.get() is None:
         log(f"editing locked: no password ({site.password.error or 'not set'})")
         log(f"  set one with: aws ssm put-parameter --name {PASSWORD_PARAM} --type SecureString --overwrite --value '…'")
     builder.build()
+
+    if args.publish is not None:
+        saved = out / ".pixpage" / "publish.json"
+        target = args.publish or read_json(saved, {}).get("target")
+        if not target:
+            sys.exit("No publish target yet — run once with --publish s3://bucket/path")
+        publish(out, target)
+        write_json(saved, {"target": target})
+        return
 
     server = start_server(site)
     host, port = server.server_address[:2]

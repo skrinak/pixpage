@@ -64,7 +64,7 @@ uv run pixpage.py ~/Pictures/Oct6
 
 Open <http://127.0.0.1:8000/>. The site is written to `~/Documents/Websites/<folder name>/`.
 
-The script takes exactly one argument, the folder of media. It then:
+Given the folder of media, the script:
 
 1. builds or updates the site, processing only new or changed files;
 2. serves it on `127.0.0.1` (port 8000, or the next free one);
@@ -201,41 +201,46 @@ JSON files alone wouldn't load.
 
 ## Publishing to S3
 
-The site is plain static files, so any static host works. For an S3 bucket with
-**static website hosting** enabled and public read access:
+One command builds the site, uploads it and refreshes CloudFront:
 
 ```sh
-SRC=~/Documents/Websites/Oct6
-DST=s3://<bucket>/Websites/Oct6
-R="--region <bucket-region> --acl public-read --only-show-errors"
-
-# media and app bundle: cache for a day
-aws s3 sync $SRC $DST $R --exclude ".pixpage/*" --exclude ".DS_Store" \
-  --exclude "index.html" --exclude "data/*" --exclude "fonts/*" \
-  --cache-control "public, max-age=86400"
-
-# fonts: correct type, cache for a year
-aws s3 sync $SRC/fonts $DST/fonts $R --content-type font/woff2 \
-  --cache-control "public, max-age=31536000, immutable"
-
-# page and data: always revalidate, so caption edits and new media show up
-aws s3 sync $SRC $DST $R --exclude "*" --include "index.html" --include "data/*" \
-  --cache-control "no-cache"
+uv run pixpage.py ~/Pictures/Oct6 --publish s3://<bucket>/Websites/Oct6   # first time
+uv run pixpage.py ~/Pictures/Oct6 --publish                               # afterwards
 ```
 
-The gallery is then at `http://<bucket>.s3-website-<region>.amazonaws.com/Websites/Oct6/`.
+```
+[21:56:46] publishing to s3://test.tube/Websites/Oct6  (region us-east-1, public-read ACL)
+[21:56:47]   media   0 uploaded, 0 removed
+[21:56:50]   fonts   10 uploaded
+[21:56:51]   site    1 uploaded (page, app, data, assets)
+[21:56:52] website http://test.tube.s3-website-us-east-1.amazonaws.com/Websites/Oct6/
+[21:56:54] https   https://dpxcj177comrd.cloudfront.net/Websites/Oct6/  (CloudFront E3GYOKCU59QU2W refreshed)
+```
 
-Notes:
+What `--publish` does:
 
-- **Use the bucket's own region.** If your CLI default region differs, every request gets
-  redirected and large uploads can time out. Find it with
-  `aws s3api get-bucket-location --bucket <bucket>` (`null` means `us-east-1`).
-- **`--acl public-read`** needs ACLs enabled on the bucket. If ACLs are disabled, drop the flag and
-  use a bucket policy that grants `s3:GetObject`.
-- **Never upload `.pixpage/`.** It is the local build cache and contains your source folder path.
-- `sync` only uploads missing or changed files, so re-running it is cheap and resumes interrupted
-  uploads.
-- **Read-only.** The published site has no edit API, so it hides the lock and help.
+- **Builds first** (incrementally), then exits instead of serving.
+- **Finds the bucket's region itself.** A wrong region makes every request redirect, and large
+  uploads time out.
+- **Uses `--acl public-read` only if the bucket allows ACLs.** With ACLs disabled, public access
+  must come from the bucket policy.
+- **Uploads in three passes with suitable cache headers:**
+  - `media/`: cached for a day. This is the only pass that deletes, so photos removed locally
+    disappear from S3, but nothing else under the prefix can be touched.
+  - `fonts/`: `font/woff2`, cached for a year.
+  - Page, `app.js`/`app.css`, `data/` and `assets/`: `no-cache`, so edits show up at once.
+- **Never uploads** `.pixpage/` (the build cache), `.DS_Store` or temp files.
+- **Prints the S3 website URL** if website hosting is enabled.
+- **Refreshes CloudFront:** every enabled distribution whose origin is the bucket is invalidated
+  for the gallery's path, and its `https://` URL is printed.
+- **Remembers the target** in `.pixpage/publish.json`, so later runs only need `--publish`.
+
+Only changed files are uploaded, so re-publishing is quick and resumes interrupted uploads.
+
+Bucket setup (once): enable **static website hosting** with index document `index.html`, and
+allow public reads (bucket policy granting `s3:GetObject`, or ACLs). S3 website endpoints are
+http-only; put CloudFront in front for https. The published site has no edit API, so it is
+read-only and hides the lock and help.
 
 ---
 
@@ -310,8 +315,8 @@ characters; up to 64 keywords of 80 characters each.
 
 ## Configuration
 
-pixpage deliberately takes only the folder as an argument. To change other settings, edit the
-constants at the top of `pixpage.py`:
+pixpage takes only the folder (plus `--publish`). To change other settings, edit the constants
+at the top of `pixpage.py`:
 
 | Constant | Default | Meaning |
 | --- | --- | --- |
@@ -380,15 +385,14 @@ The next `uv run pixpage.py …` copies the new bundle into the site.
 | `… was built from …, not …` | Two source folders share a name; rename one. Each site is tied to its source. |
 | `… exists and wasn't made by pixpage` | pixpage won't overwrite an existing, unrelated folder in `~/Documents/Websites`. |
 | CORS error opening `index.html` from disk | Rebuild with the current version, which writes the `data/*.js` twins. |
-| S3 uploads time out | Pass the bucket's region (`--region`); check your upload bandwidth. |
+| S3 uploads time out | `--publish` picks the bucket's region automatically; if it still times out, check your upload bandwidth. |
 | Washed-out iPhone HDR video posters | Known limitation: HDR is not tone-mapped yet. |
 
 ---
 
 ## Roadmap
 
-- One-command publishing to S3, plus a small Lambda behind `api/` (same SSM password) for editing
-  online
+- A small Lambda behind `api/` (same SSM password) for editing the published site online
 - Live Photo pairing (play the motion clip on the photo)
 - Albums from subfolders, and a map view
 - Option to strip GPS before publishing
