@@ -27,8 +27,37 @@ export function fillPlaceholders(text, vars) {
   return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (m, name) => (name in vars ? vars[name] : m));
 }
 
+// A table with one header row and one body row is a statistics strip: turn each column
+// into a number-over-label block so the strip can wrap on narrow screens.
+function statStrips(html) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  for (const table of tpl.content.querySelectorAll('table')) {
+    const heads = [...table.querySelectorAll('thead th')];
+    const rows = table.querySelectorAll('tbody tr');
+    const cells = rows.length === 1 ? [...rows[0].children] : [];
+    if (!heads.length || cells.length !== heads.length) continue;
+    const strip = document.createElement('div');
+    strip.className = 'stats';
+    heads.forEach((th, i) => {
+      const stat = document.createElement('div');
+      stat.className = 'stat';
+      const num = document.createElement('div');
+      num.className = 'stat-value';
+      num.append(...th.childNodes);
+      const label = document.createElement('div');
+      label.className = 'stat-label';
+      label.append(...cells[i].childNodes);
+      stat.append(num, label);
+      strip.append(stat);
+    });
+    table.replaceWith(strip);
+  }
+  return tpl.innerHTML;
+}
+
 export function renderMarkdown(text) {
-  return DOMPurify.sanitize(marked.parse(text || ''), { ADD_ATTR: ['target'] });
+  return statStrips(DOMPurify.sanitize(marked.parse(text || ''), { ADD_ATTR: ['target'] }));
 }
 
 // The first level-1 heading doubles as the page / toolbar title.

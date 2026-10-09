@@ -66,14 +66,19 @@ const proseSx = {
   '& hr': { border: 0, height: '1px', width: 72, bgcolor: 'divider', mx: 0, my: 3 },
   '& img': { maxWidth: '100%', height: 'auto', borderRadius: 1 },
   '& code': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.88em', px: 0.5, borderRadius: 0.5, bgcolor: 'action.hover' },
-  // A table renders as a statistics strip: big numbers in the first row, labels beneath.
-  '& table': {
-    borderCollapse: 'collapse',
+  // Statistics strip (a two-row Markdown table, see markdown.js): wraps on narrow screens.
+  '& .stats': {
+    display: { xs: 'grid', sm: 'flex' },
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    flexWrap: 'wrap',
+    columnGap: { xs: 3, md: 7 },
+    rowGap: 2.5,
     my: 3,
-    '& th, & td': { textAlign: 'left !important', verticalAlign: 'top', pr: { xs: 3, md: 7 }, border: 0 },
-    '& th': { fontFamily: serif, fontWeight: 560, fontSize: { xs: '1.9rem', md: '2.5rem' }, lineHeight: 1, color: 'text.primary', pb: 1 },
-    '& td': { fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'text.secondary', maxWidth: 180 },
   },
+  '& .stat': { maxWidth: { sm: 180 } },
+  '& .stat-value': { fontFamily: serif, fontWeight: 560, fontSize: { xs: '1.9rem', md: '2.5rem' }, lineHeight: 1, color: 'text.primary', mb: 1 },
+  '& .stat-label': { fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'text.secondary', lineHeight: 1.45 },
+  '& table': { borderCollapse: 'collapse', my: 2, '& th, & td': { textAlign: 'left', px: 1.5, py: 0.5, borderBottom: '1px solid', borderColor: 'divider' } },
 };
 
 export function HeaderMarkdown({ markdown, vars, sx }) {
