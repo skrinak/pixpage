@@ -14,6 +14,7 @@ import ArrowBack from '@mui/icons-material/ArrowBack';
 import ChevronLeft from '@mui/icons-material/ChevronLeft';
 import ChevronRight from '@mui/icons-material/ChevronRight';
 import EditOutlined from '@mui/icons-material/EditOutlined';
+import DeleteOutlined from '@mui/icons-material/DeleteOutlined';
 import OpenInNew from '@mui/icons-material/OpenInNew';
 import { Print } from './Print.jsx';
 import { ColorModeButton, EditLock, HelpButton, barSx } from './Toolbar.jsx';
@@ -87,7 +88,7 @@ function metaRows(item) {
   ].filter(([, v]) => v);
 }
 
-export default function Detail({ item, index, list, route, api, editing, onUnlock, onLock, onEdit, onHelp, dialogOpen }) {
+export default function Detail({ item, index, list, route, api, editing, onUnlock, onLock, onEdit, onDelete, onHelp, dialogOpen }) {
   const prev = list[index - 1];
   const next = list[index + 1];
   const touch = useRef(null);
@@ -145,6 +146,13 @@ export default function Detail({ item, index, list, route, api, editing, onUnloc
           <IconButton onClick={() => go(next)} disabled={!next} aria-label="Next">
             <ChevronRight />
           </IconButton>
+          {editing && (
+            <Tooltip title={`Delete ${item.type}`}>
+              <IconButton onClick={() => onDelete(item)} aria-label={`Delete ${item.type}`} sx={{ '&:hover': { color: 'error.main' } }}>
+                <DeleteOutlined fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title="Open full size">
             <IconButton component="a" href={item.video || item.large} target="_blank" rel="noopener" aria-label="Open full size">
               <OpenInNew fontSize="small" />

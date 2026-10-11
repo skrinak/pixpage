@@ -14,9 +14,12 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import SearchIcon from '@mui/icons-material/Search';
 import Close from '@mui/icons-material/Close';
 import EditOutlined from '@mui/icons-material/EditOutlined';
+import DeleteOutlined from '@mui/icons-material/DeleteOutlined';
+import SmartDisplayOutlined from '@mui/icons-material/SmartDisplayOutlined';
 import { Print, VideoBadge, fit } from './Print.jsx';
 import { ColorModeButton, EditLock, HelpButton, barSx } from './Toolbar.jsx';
 import { HeaderMarkdown } from './Header.jsx';
+import { VideoSection } from './Videos.jsx';
 import { buildHash, navigate } from './route.js';
 import { tilt } from './util.js';
 
@@ -74,7 +77,7 @@ function SearchField({ value, onChange }) {
   );
 }
 
-function Card({ item, route, editing, onEdit }) {
+function Card({ item, route, editing, onEdit, onDelete }) {
   const size = fit(item.thumb.w, item.thumb.h, THUMB_W, THUMB_H);
   return (
     <Box
@@ -119,26 +122,30 @@ function Card({ item, route, editing, onEdit }) {
           {item.type === 'video' && <VideoBadge duration={item.duration} />}
         </Print>
         {editing && (
-          <Tooltip title="Edit description">
-            <IconButton
-              className="edit-btn"
-              onClick={() => onEdit(item)}
-              size="small"
-              aria-label="Edit description"
-              sx={{
-                position: 'absolute',
-                top: 4,
-                right: 4,
-                opacity: { xs: 1, md: 0 },
-                transition: 'opacity .2s',
-                bgcolor: 'background.paper',
-                boxShadow: 2,
-                '&:hover': { bgcolor: 'background.paper' },
-              }}
-            >
-              <EditOutlined fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          <Box
+            className="edit-btn"
+            sx={{
+              position: 'absolute',
+              top: 4,
+              right: 4,
+              display: 'flex',
+              gap: 0.75,
+              opacity: { xs: 1, md: 0 },
+              transition: 'opacity .2s',
+              '& .MuiIconButton-root': { bgcolor: 'background.paper', boxShadow: 2, '&:hover': { bgcolor: 'background.paper' } },
+            }}
+          >
+            <Tooltip title="Edit description">
+              <IconButton onClick={() => onEdit(item)} size="small" aria-label="Edit description">
+                <EditOutlined fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={`Delete ${item.type}`}>
+              <IconButton onClick={() => onDelete(item)} size="small" aria-label={`Delete ${item.type}`} sx={{ '&:hover': { color: 'error.main' } }}>
+                <DeleteOutlined fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
         )}
       </Box>
       <Box sx={{ mt: 1, px: 1, width: '100%', textAlign: 'center', minHeight: 8 }}>
@@ -168,7 +175,7 @@ function Card({ item, route, editing, onEdit }) {
   );
 }
 
-export default function Gallery({ title, header, headerVars, onEditHeader, onHelp, allItems, items, keywordCounts, route, api, editing, onUnlock, onLock, onEdit, focusId }) {
+export default function Gallery({ title, header, headerVars, onEditHeader, videos: linked, onEditVideos, onHelp, allItems, items, keywordCounts, route, api, editing, onUnlock, onLock, onEdit, onDelete, focusId }) {
   const setRoute = (patch) => navigate({ view: 'gallery', q: route.q, t: route.t, k: route.k, ...patch }, { replace: true });
   const focusIndex = focusId ? items.findIndex((it) => it.id === focusId) : -1;
   const [limit, setLimit] = useState(Math.max(PAGE, focusIndex + PAGE));
@@ -241,12 +248,24 @@ export default function Gallery({ title, header, headerVars, onEditHeader, onHel
           <HeaderMarkdown markdown={header} vars={headerVars} />
         </Box>
         {editing && (
-          <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={onEditHeader} sx={{ mt: 2.5, bgcolor: 'background.paper' }}>
-            Edit header
-          </Button>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 2.5 }}>
+            <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={onEditHeader} sx={{ bgcolor: 'background.paper' }}>
+              Edit header
+            </Button>
+            {linked.length === 0 && (
+              <Button size="small" variant="outlined" startIcon={<SmartDisplayOutlined />} onClick={onEditVideos} sx={{ bgcolor: 'background.paper' }}>
+                Add videos
+              </Button>
+            )}
+          </Box>
         )}
+        <VideoSection videos={linked} editing={editing} onEdit={onEditVideos} />
+        {/* #photos lands here rather than on the grid, so the tag filter stays in view. */}
+        <Typography id="photos" variant="h5" component="h2" sx={{ mt: { xs: 5, md: 7 } }}>
+          Photos
+        </Typography>
         {cloud.length > 0 && (
-          <Typography component="div" variant="body2" sx={{ mt: 4, mb: 1.25, color: 'text.secondary' }}>
+          <Typography component="div" variant="body2" sx={{ mt: 2, mb: 1.25, color: 'text.secondary' }}>
             <Box component="span" sx={{ fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '0.72rem', mr: 1 }}>
               Filter by tag
             </Box>
@@ -279,7 +298,7 @@ export default function Gallery({ title, header, headerVars, onEditHeader, onHel
         )}
       </Container>
 
-      <Container maxWidth="xl" sx={{ pb: 12 }}>
+      <Container component="section" aria-label="Photos" maxWidth="xl" sx={{ pb: 12 }}>
         {items.length === 0 ? (
           <Typography sx={{ textAlign: 'center', color: 'text.secondary', py: 10 }}>
             {allItems.length ? 'Nothing matches your search.' : 'No photos or videos yet — add some to the source folder.'}
@@ -296,7 +315,7 @@ export default function Gallery({ title, header, headerVars, onEditHeader, onHel
             }}
           >
             {items.slice(0, limit).map((item) => (
-              <Card key={item.id} item={item} route={route} editing={editing} onEdit={onEdit} />
+              <Card key={item.id} item={item} route={route} editing={editing} onEdit={onEdit} onDelete={onDelete} />
             ))}
           </Box>
         )}

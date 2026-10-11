@@ -57,6 +57,8 @@ const MARKDOWN = [
   ['###### Small caps', 'Small uppercase label, like the date line'],
   ['**bold**  *italic*', 'Emphasis'],
   ['[text](https://…)', 'Link (opens in a new tab)'],
+  ['[text](#photos)', 'Jump down to the photos'],
+  ['[text](#videos)', 'Jump down to the Videos section'],
   ['![alt](https://…/img.jpg)', 'Image'],
   ['- item', 'Bulleted list (1. for numbered)'],
   ['> quote', 'Pull quote'],
@@ -125,11 +127,30 @@ export function HelpDrawer({ open, section, onClose }) {
           </Box>
         </Section>
 
+        <Section id="videos" title="Link YouTube videos">
+          <ul>
+            <li>With editing unlocked, click <b>Add videos</b> below the header (or <b>Edit videos</b> next to the Videos heading).</li>
+            <li>Paste YouTube links, one per line, into <b>Add videos</b> and click <b>Add</b>. Each link becomes a row.</li>
+            <li><b>Title below the thumbnail</b> comes from YouTube; type over it to use your own, or clear it to fetch YouTube's again.</li>
+            <li><b>Title above the thumbnail</b> is optional, for a short label such as a speaker or company name.</li>
+            <li>Use the arrows to reorder and the 🗑 to remove a video. Remove them all and the section disappears.</li>
+            <li>The <b>Videos</b> section appears between the header and the photos. Clicking a thumbnail or its titles opens the video in a new tab.</li>
+          </ul>
+        </Section>
+
         <Section id="captions" title="Descriptions & keywords">
           <ul>
             <li>On the gallery, click <b>Add description</b> or the <b>✎</b> button on a print. On a photo page, click <b>Edit</b> or press <b>E</b>.</li>
             <li>The description can be as long as you like. The gallery shows two lines and the photo page shows all of it.</li>
             <li>To add a keyword, type it and press Enter or a comma. Earlier keywords are suggested as you type.</li>
+          </ul>
+        </Section>
+
+        <Section id="delete" title="Delete a photo or video">
+          <ul>
+            <li>With editing unlocked, hover over a print and click the <b>🗑</b> next to ✎, or click 🗑 in the top bar of a photo page.</li>
+            <li>After you confirm, the photo and its description and keywords leave the gallery. If the gallery is published, its files are deleted from S3 and CloudFront is refreshed right away. Only the deletion is published, not your other edits.</li>
+            <li>The original file stays in your source folder and is skipped from then on. To bring it back, remove its entry from <Code>.pixpage/excluded.json</Code> in the site folder and re-run pixpage. The old caption is saved there too.</li>
           </ul>
         </Section>
 

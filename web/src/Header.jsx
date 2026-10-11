@@ -80,9 +80,22 @@ const proseSx = {
   '& table': { borderCollapse: 'collapse', my: 2, '& th, & td': { textAlign: 'left', px: 1.5, py: 0.5, borderBottom: '1px solid', borderColor: 'divider' } },
 };
 
+// In-page links such as [68 photos](#photos) scroll to that section. The URL hash is the
+// app's router (#/…), so these are handled here instead of letting the browser follow them.
+function scrollToAnchor(e) {
+  const a = e.target.closest?.('a[href^="#"]');
+  const href = a?.getAttribute('href') || '';
+  if (!a || href.startsWith('#/')) return;
+  const el = document.getElementById(decodeURIComponent(href.slice(1)));
+  if (!el) return;
+  e.preventDefault();
+  const instant = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || document.visibilityState !== 'visible';
+  el.scrollIntoView({ behavior: instant ? 'auto' : 'smooth', block: 'start' });
+}
+
 export function HeaderMarkdown({ markdown, vars, sx }) {
   const html = useMemo(() => renderMarkdown(fillPlaceholders(markdown || DEFAULT_HEADER, vars)), [markdown, vars]);
-  return <Box sx={[proseSx, ...(Array.isArray(sx) ? sx : [sx])]} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <Box onClick={scrollToAnchor} sx={[proseSx, ...(Array.isArray(sx) ? sx : [sx])]} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 const SPLIT_KEY = 'pixpage.headerSplit';

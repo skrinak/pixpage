@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify';
 
 // What the header shows until someone edits it — the same three lines the old
 // iPhoto export had (date, title, count), now as editable Markdown.
-export const DEFAULT_HEADER = '###### {{dates}}\n\n# {{title}}\n\n{{counts}}\n';
+export const DEFAULT_HEADER = '###### {{dates}}\n\n# {{title}}\n\n[{{counts}}](#photos)\n';
 
 export const PLACEHOLDERS = [
   ['{{title}}', 'Source folder name'],

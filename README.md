@@ -169,7 +169,24 @@ Headings, paragraphs, **bold**, *italic*, links, images, lists, quotes, tables a
 are supported. The output is sanitized with DOMPurify: scripts, event handlers and
 `javascript:` links are removed.
 
-### 4. Describe photos
+### 4. Link YouTube videos
+
+Click **Add videos** below the header (or **Edit videos** next to the Videos heading). Paste
+YouTube links, one per line, into **Add videos** and click **Add**; each link becomes a row:
+
+- **Title below the thumbnail** comes from YouTube. Type over it to use your own, or clear it
+  to fetch YouTube's again.
+- **Title above the thumbnail** is optional, for a short label such as a speaker or company name.
+- The arrows reorder the videos and 🗑 removes one. Remove them all and the section disappears.
+
+The **Videos** section sits between the header and the photos. Each video shows its YouTube
+thumbnail and titles, and clicking any of them opens the video in a new tab.
+`[text](#videos)` in the header jumps down to the section.
+
+These are links only: nothing is downloaded, and they are not counted in `{{videos}}`, which
+counts video files in the source folder.
+
+### 5. Describe photos
 
 - On the gallery page, click **Add description** or the ✎ button on a print.
 - On a detail page, click **Edit** or press **E**.
@@ -178,6 +195,20 @@ are supported. The output is sanitized with DOMPurify: scripts, event handlers a
 
 The gallery shows two lines of each description; the detail page shows all of it. Keywords
 are searchable and appear in the keyword cloud and on the detail page.
+
+### 6. Delete a photo or video
+
+With editing unlocked, hover over a print and click **🗑** (next to ✎), or click 🗑 in the top bar of
+a photo page. After you confirm:
+
+- The item and its description and keywords are removed from the gallery and its generated
+  images are deleted.
+- If the gallery has been published (`--publish`), the item's files are deleted from S3, the
+  updated photo list is uploaded and CloudFront is refreshed straight away. Nothing else is
+  published, so unpublished edits stay local.
+- **The original stays in your source folder.** It's recorded in `.pixpage/excluded.json`
+  (with its old caption) and skipped by every later build. To restore it, delete its entry
+  there and re-run pixpage.
 
 ### Help panel
 
@@ -254,12 +285,15 @@ read-only and hides the lock and help.
 ├── app.js  app.css  fonts/    frontend (copied from web/dist on every run)
 ├── data/
 │   ├── media.json  (+ .js)    generated: items, sizes, dates, EXIF — rewritten by builds
-│   └── captions.json (+ .js)  your header, descriptions & keywords — never overwritten
+│   └── captions.json (+ .js)  your header, video links, descriptions & keywords — never overwritten
 ├── media/
 │   ├── thumbs/<id>.jpg        fit within 720 × 480, shown at 360 × 240 (2× for retina)
 │   ├── large/<id>.jpg         2560 px on the long side; for videos, the poster frame
 │   └── video/<id>.mp4         web-playable video
-└── .pixpage/state.json        build cache (do not publish)
+└── .pixpage/                  local only, never published
+    ├── state.json             build cache
+    ├── publish.json           saved --publish target
+    └── excluded.json          items deleted from the gallery (originals kept)
 ```
 
 **IDs** come from file names: `IMG_3892.HEIC` → `img-3892`. When a photo and a video share a name
@@ -308,6 +342,7 @@ Safari requires for video, and marks `index.html` and `data/` as `no-store`. The
 | `POST /api/login` | — | Checks the password |
 | `POST /api/captions` | `{id, description, keywords[]}` | Saves one item's caption |
 | `POST /api/gallery` | `{header}` | Saves the Markdown header (empty = default) |
+| `POST /api/delete` | `{id}` | Removes an item from the gallery (and from S3 if published) |
 
 POST requests carry the password in an `X-Pixpage-Password` header. It is compared in constant
 time, and wrong attempts are delayed. Limits: descriptions and the header up to 20,000

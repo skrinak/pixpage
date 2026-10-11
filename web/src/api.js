@@ -59,6 +59,8 @@ export const saveCaption = (password, id, caption) => post('api/captions', { id,
 
 export const saveGallery = (password, gallery) => post('api/gallery', gallery, password);
 
+export const deleteItem = (password, id) => post('api/delete', { id }, password);
+
 export const session = {
   get(key) {
     try {

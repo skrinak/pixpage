@@ -44,6 +44,8 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
+import urllib.request
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
 from http import HTTPStatus
@@ -74,6 +76,8 @@ PORT = 8000
 MAX_DESCRIPTION = 20_000
 MAX_KEYWORDS = 64
 MAX_KEYWORD_LEN = 80
+MAX_VIDEOS = 100
+MAX_VIDEO_TITLE = 300
 
 
 def log(msg: str) -> None:
@@ -335,6 +339,13 @@ def process(kind: str, src: str, out: str, item_id: str) -> dict:
 # --------------------------------------------------------------------------- build
 
 
+def excluded_path(out: Path) -> Path:
+    """Source files deleted from the gallery: {file name: {id, deleted, caption}}.
+    Remove an entry (and re-run) to bring a photo back."""
+    return out / ".pixpage" / "excluded.json"
+
+
+
 def item_outputs(out: Path, item: dict) -> list[Path]:
     paths = [item.get("large"), item.get("thumb", {}).get("src"), item.get("video")]
     return [out / p for p in paths if p]
@@ -387,8 +398,11 @@ class Builder:
     def _build(self) -> bool:
         state = read_json(self.state_path, {})
         known = state.get("files", {}) if state.get("pipeline") == PIPELINE else {}
-        files = scan(self.src)
-        ids = assign_ids(files)
+        all_files = scan(self.src)
+        ids = assign_ids(all_files)
+        # Photos deleted from the gallery stay in the source folder but are skipped.
+        excluded = read_json(excluded_path(self.out), {})
+        files = [f for f in all_files if f.name not in excluded]
         entries: dict[str, dict] = {}
         todo: list[tuple[Path, str, list[int]]] = []
 
@@ -490,6 +504,63 @@ class Password:
         return hmac.compare_digest(attempt.encode(), actual.encode())
 
 
+# --------------------------------------------------------------------------- linked videos
+
+
+def youtube_id(url: str) -> str | None:
+    """The video ID from any of YouTube's link forms (youtu.be/…, watch?v=…, shorts, embed, live)."""
+    u = urllib.parse.urlparse(url if "://" in url else f"https://{url}")
+    host = (u.hostname or "").lower().removeprefix("www.").removeprefix("m.")
+    parts = u.path.strip("/").split("/")
+    if host == "youtu.be":
+        vid = parts[0]
+    elif host in ("youtube.com", "music.youtube.com", "youtube-nocookie.com"):
+        if parts[0] == "watch":
+            vid = urllib.parse.parse_qs(u.query).get("v", [""])[0]
+        else:
+            vid = parts[1] if parts[0] in ("shorts", "embed", "live", "v") and len(parts) > 1 else ""
+    else:
+        return None
+    return vid if re.fullmatch(r"[A-Za-z0-9_-]{11}", vid) else None
+
+
+def youtube_title(vid: str) -> str | None:
+    """Ask YouTube's oEmbed endpoint (no API key needed) what the video is called."""
+    watch = urllib.parse.quote(f"https://www.youtube.com/watch?v={vid}", safe="")
+    try:
+        with urllib.request.urlopen(f"https://www.youtube.com/oembed?format=json&url={watch}", timeout=10) as res:
+            title = json.load(res).get("title")
+    except (OSError, ValueError):
+        return None
+    return title if isinstance(title, str) else None
+
+
+def clean_videos(videos) -> tuple[list[dict], str | None]:
+    """Validate the videos sent by the editor → (videos, error). Titles left blank come from YouTube;
+    the heading (shown above the thumbnail) is optional."""
+    if not isinstance(videos, list) or len(videos) > MAX_VIDEOS:
+        return [], f"videos must be a list of up to {MAX_VIDEOS} links"
+    clean, seen = [], set()
+    for v in videos:
+        url, title, heading = (v.get("url"), v.get("title", ""), v.get("heading", "")) if isinstance(v, dict) else (None, "", "")
+        if not all(isinstance(x, str) for x in (url, title, heading)):
+            return [], "each video needs a link and, optionally, a title and a heading"
+        vid = youtube_id(url.strip())
+        if not vid:
+            return [], f"Not a YouTube link: {url.strip()[:200]}"
+        if vid in seen:
+            continue
+        seen.add(vid)
+        title = " ".join(title.split()) or youtube_title(vid)
+        if not title:
+            return [], f"Couldn't get the title of {url.strip()} from YouTube. Check the link, or type a title after it."
+        video = {"id": vid, "url": f"https://youtu.be/{vid}", "title": title[:MAX_VIDEO_TITLE]}
+        if heading := " ".join(heading.split())[:MAX_VIDEO_TITLE]:
+            video["heading"] = heading
+        clean.append(video)
+    return clean, None
+
+
 # --------------------------------------------------------------------------- server
 
 
@@ -538,7 +609,8 @@ def make_handler(site: Site):
         def do_GET(self):
             path = self.path.split("?")[0]
             if path == "/api/status":
-                return self.send_json(200, {"version": site.version, "editing": True})
+                target = read_json(site.out / ".pixpage" / "publish.json", {}).get("target")
+                return self.send_json(200, {"version": site.version, "editing": True, "published": target})
             if path.startswith("/.pixpage"):
                 return self.send_error(HTTPStatus.NOT_FOUND)
             return super().do_GET()
@@ -581,7 +653,7 @@ def make_handler(site: Site):
 
         def do_POST(self):
             path = self.path.split("?")[0]
-            if path not in ("/api/login", "/api/captions", "/api/gallery"):
+            if path not in ("/api/login", "/api/captions", "/api/gallery", "/api/delete"):
                 return self.send_json(404, {"error": "not found"})
             try:
                 length = int(self.headers.get("Content-Length") or 0)
@@ -599,6 +671,8 @@ def make_handler(site: Site):
                 return self.send_json(200, {"ok": True})
             if path == "/api/gallery":
                 return self.save_gallery(body)
+            if path == "/api/delete":
+                return self.delete_item(body)
             return self.save_caption(body)
 
         def save_caption(self, body: dict):
@@ -631,23 +705,69 @@ def make_handler(site: Site):
             return self.send_json(200, {"ok": True, "caption": caption})
 
         def save_gallery(self, body: dict):
-            """Gallery-wide text: the Markdown header. An empty header means "use the default"."""
-            header = body.get("header", "")
-            if not isinstance(header, str) or len(header) > MAX_DESCRIPTION:
+            """Gallery-wide content: the Markdown header and the linked videos. Only what is sent
+            changes. An empty header means "use the default"; an empty video list removes the section."""
+            header, videos = body.get("header"), None
+            if header is not None and (not isinstance(header, str) or len(header) > MAX_DESCRIPTION):
                 return self.send_json(400, {"error": f"header must be text up to {MAX_DESCRIPTION} characters"})
+            if "videos" in body:
+                videos, error = clean_videos(body["videos"])
+                if error:
+                    return self.send_json(400, {"error": error})
             with site.captions_lock:
                 path = site.out / "data" / "captions.json"
                 data = read_json(path, {"schema": 1, "items": {}})
                 gallery = data.setdefault("gallery", {})
-                if header.strip():
-                    gallery["header"] = header.strip()
-                else:
-                    gallery.pop("header", None)
+                for key, value in (("header", header and header.strip()), ("videos", videos)):
+                    if value:
+                        gallery[key] = value
+                    elif value is not None:
+                        gallery.pop(key, None)
                 gallery["updated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
                 write_json(path, data)
                 site.bump()
-            log("gallery header saved" if header.strip() else "gallery header reset to default")
+            if header is not None:
+                log("gallery header saved" if header.strip() else "gallery header reset to default")
+            if videos is not None:
+                log(f"videos saved ({len(videos)})")
             return self.send_json(200, {"ok": True, "gallery": gallery})
+
+        def delete_item(self, body: dict):
+            """Remove a photo or video from the gallery (and from S3 if published). The original in
+            the source folder is kept but excluded from future builds."""
+            item_id = body.get("id")
+            media = read_json(site.out / "data" / "media.json", {"items": []})
+            item = next((it for it in media["items"] if it["id"] == item_id), None)
+            if not item:
+                return self.send_json(400, {"error": "unknown item"})
+            outputs = [p.relative_to(site.out).as_posix() for p in item_outputs(site.out, item)]
+
+            with site.captions_lock:
+                path = site.out / "data" / "captions.json"
+                data = read_json(path, {"schema": 1, "items": {}})
+                caption = data.get("items", {}).pop(item_id, None)
+                write_json(path, data)
+                excluded = read_json(excluded_path(site.out), {})
+                excluded[item["name"]] = {
+                    "id": item_id,
+                    "deleted": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "caption": caption,
+                }
+                write_json(excluded_path(site.out), excluded)
+            site.builder.build()  # drops it from media.json and deletes its local images
+            site.bump()
+            log(f"deleted {item['name']} ({item_id}) from the gallery; original kept in the source folder")
+
+            target = read_json(site.out / ".pixpage" / "publish.json", {}).get("target")
+            if not target:
+                s3 = "Not published yet — nothing to remove from S3."
+            else:
+                try:
+                    s3 = unpublish_item(site.out, target, outputs)
+                except SystemExit as e:  # the AWS helpers exit on fatal errors; report instead
+                    s3 = f"Removed locally, but S3 removal failed: {e}"
+                log(f"  {s3}")
+            return self.send_json(200, {"ok": True, "s3": s3})
 
     return Handler
 
@@ -781,6 +901,29 @@ def cloudfront_targets(bucket: str, prefix: str) -> list[tuple[str, str, str]]:
             found.append((dist["Id"], f"https://{domain}/{path}/" if path else f"https://{domain}/", f"/{path}/*" if path else "/*"))
             break
     return found
+
+
+def unpublish_item(out: Path, target: str, outputs: list[str]) -> str:
+    """Remove one item from a published site without publishing anything else."""
+    bucket, prefix = parse_s3_url(target)
+    dst = f"s3://{bucket}/{prefix}".rstrip("/")
+    region = bucket_region(bucket)
+    acl = acls_enabled(bucket, region)
+    for rel in outputs:
+        res = aws("s3", "rm", f"{dst}/{rel}", "--region", region, check=False)
+        if res.returncode != 0:
+            return f"Removed locally, but S3 removal failed: {res.stderr.strip()}"
+    for rel in ("data/media.json", "data/media.js"):
+        cmd = ["s3", "cp", str(out / rel), f"{dst}/{rel}", "--region", region, "--cache-control", "no-cache"]
+        res = aws(*cmd, *(["--acl", "public-read"] if acl else []), check=False)
+        if res.returncode != 0:
+            return f"Images removed from S3, but updating the photo list failed: {res.stderr.strip()}"
+    refreshed = []
+    for dist_id, _, path in cloudfront_targets(bucket, prefix):
+        res = aws("cloudfront", "create-invalidation", "--distribution-id", dist_id, "--paths", path, check=False)
+        if res.returncode == 0:
+            refreshed.append(dist_id)
+    return f"Removed from {dst}" + (" and CloudFront refreshed." if refreshed else ".")
 
 
 def publish(out: Path, target: str) -> None:

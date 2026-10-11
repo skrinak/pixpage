@@ -6,16 +6,18 @@ import Snackbar from '@mui/material/Snackbar';
 import Typography from '@mui/material/Typography';
 import Gallery from './Gallery.jsx';
 import Detail from './Detail.jsx';
-import { EditDialog, LoginDialog } from './Dialogs.jsx';
+import { DeleteDialog, EditDialog, LoginDialog } from './Dialogs.jsx';
 import { HeaderDialog } from './Header.jsx';
 import { HelpDrawer } from './Help.jsx';
-import { apiStatus, loadGallery, login, saveCaption, saveGallery, session } from './api.js';
+import { VideosDialog } from './Videos.jsx';
+import { apiStatus, deleteItem, loadGallery, login, saveCaption, saveGallery, session } from './api.js';
 import { filterItems, formatRange, haystack } from './util.js';
 import { DEFAULT_HEADER, fillPlaceholders, firstHeading } from './markdown.js';
-import { useRoute } from './route.js';
+import { navigate, useRoute } from './route.js';
 
 const PW_KEY = 'pixpage.password';
 const POLL_MS = 3000;
+const NO_VIDEOS = [];
 
 function Centered({ children }) {
   return (
@@ -35,6 +37,8 @@ export default function App() {
   const [editItem, setEditItem] = useState(null);
   const [toast, setToast] = useState(null);
   const [headerOpen, setHeaderOpen] = useState(false);
+  const [videosOpen, setVideosOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [help, setHelp] = useState(null); // null = closed, otherwise the section to show
   const lastDetail = useRef(null);
   const version = useRef(null);
@@ -99,6 +103,7 @@ export default function App() {
 
   const filtered = useMemo(() => filterItems(items, route.q, route.t, route.k), [items, route.q, route.t, route.k]);
   const header = data?.gallery?.header || '';
+  const videos = data?.gallery?.videos || NO_VIDEOS;
   const headerVars = useMemo(() => {
     const photos = items.filter((it) => it.type === 'photo').length;
     const videos = items.length - photos;
@@ -114,7 +119,7 @@ export default function App() {
   }, [items, data]);
   const title = firstHeading(fillPlaceholders(header || DEFAULT_HEADER, headerVars)) || headerVars.title;
   const editing = Boolean(api && password);
-  const anyDialog = Boolean(editItem) || loginOpen || headerOpen || help !== null;
+  const anyDialog = Boolean(editItem) || Boolean(deleteTarget) || loginOpen || headerOpen || videosOpen || help !== null;
 
   const lock = () => {
     session.set(PW_KEY, null);
@@ -156,6 +161,30 @@ export default function App() {
       setToast('Header saved');
     });
 
+  const doSaveVideos = (list) =>
+    authed(async () => {
+      const res = await saveGallery(password, { videos: list });
+      setData((d) => ({ ...d, gallery: res.gallery }));
+      setToast('Videos saved');
+    });
+
+  const doDelete = (item) =>
+    authed(async () => {
+      const res = await deleteItem(password, item.id);
+      // On a detail page, move to a neighbour (or back to the gallery) before the item disappears.
+      if (route.view === 'detail' && route.id === item.id) {
+        const i = filtered.findIndex((it) => it.id === item.id);
+        const next = filtered[i + 1] || filtered[i - 1];
+        navigate(next ? { ...route, id: next.id } : { ...route, view: 'gallery', id: null }, { replace: true });
+      }
+      setData((d) => {
+        const captions = { ...d.captions };
+        delete captions[item.id];
+        return { ...d, captions, media: { ...d.media, items: d.media.items.filter((it) => it.id !== item.id) } };
+      });
+      setToast(res.s3 ? `Deleted. ${res.s3}` : 'Deleted');
+    });
+
   // "?" opens help wherever editing is possible.
   useEffect(() => {
     const onKey = (e) => {
@@ -175,6 +204,7 @@ export default function App() {
     onUnlock: () => setLoginOpen(true),
     onLock: lock,
     onEdit: setEditItem,
+    onDelete: setDeleteTarget,
     onHelp: (section = 'unlock') => setHelp(section),
   };
 
@@ -220,6 +250,8 @@ export default function App() {
         header={header}
         headerVars={headerVars}
         onEditHeader={() => setHeaderOpen(true)}
+        videos={videos}
+        onEditVideos={() => setVideosOpen(true)}
         allItems={items}
         items={filtered}
         keywordCounts={keywordCounts}
@@ -252,11 +284,13 @@ export default function App() {
         onSave={doSaveHeader}
         onHelp={() => setHelp('header')}
       />
+      <VideosDialog open={videosOpen} videos={videos} onClose={() => setVideosOpen(false)} onSave={doSaveVideos} />
       <HelpDrawer open={help !== null} section={help} onClose={() => setHelp(null)} />
+      <DeleteDialog item={deleteTarget} published={api?.published} onClose={() => setDeleteTarget(null)} onDelete={doDelete} />
       <Snackbar
         open={Boolean(toast)}
         message={toast}
-        autoHideDuration={2600}
+        autoHideDuration={toast?.startsWith('Deleted') ? 6000 : 2600}
         onClose={() => setToast(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       />

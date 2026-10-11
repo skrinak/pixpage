@@ -171,3 +171,56 @@ export function LoginDialog({ open, onClose, onLogin }) {
     </Dialog>
   );
 }
+
+export function DeleteDialog({ item, published, onClose, onDelete }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setError(null);
+    setBusy(false);
+  }, [item]);
+
+  if (!item) return null;
+  const what = item.type === 'video' ? 'video' : 'photo';
+
+  const confirm = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onDelete(item);
+      onClose();
+    } catch (e) {
+      setError(e.message || 'Could not delete');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={Boolean(item)} onClose={busy ? undefined : onClose} fullWidth maxWidth="xs">
+      <DialogTitle>Delete this {what}?</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Box component="img" src={item.thumb.src} alt="" sx={{ width: 96, height: 72, objectFit: 'cover', borderRadius: 1, flexShrink: 0 }} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{item.description || item.name}</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>{item.name}</Typography>
+          </Box>
+        </Box>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          It will be removed from the gallery along with its description and keywords
+          {published ? <>, and deleted from <b>{published}</b></> : ''}. The original file stays in your source folder.
+        </Typography>
+        {error && <Alert severity="error">{error}</Alert>}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} disabled={busy}>
+          Cancel
+        </Button>
+        <Button variant="contained" color="error" onClick={confirm} loading={busy} disableElevation>
+          Delete
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
