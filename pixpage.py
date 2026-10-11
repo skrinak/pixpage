@@ -34,6 +34,7 @@ Publish (build, upload to S3, refresh CloudFront, then exit):
 from __future__ import annotations
 
 import argparse
+import filecmp
 import hmac
 import json
 import mimetypes
@@ -72,6 +73,7 @@ PIPELINE = 1  # bump when output formats change to force regeneration
 PASSWORD_PARAM = "/pixpage/edit-password"
 PASSWORD_TTL = 60  # seconds; re-read from SSM so `aws ssm put-parameter` takes effect quickly
 PORT = 8000
+DROPBOX = "dropbox"  # S3 key beside the published site where new originals are dropped
 
 MAX_DESCRIPTION = 20_000
 MAX_KEYWORDS = 64
@@ -575,6 +577,7 @@ class Site:
         self.version = 1
         self.password = Password()
         self.captions_lock = threading.Lock()
+        self.dropbox_lock = threading.Lock()
 
     def bump(self) -> None:
         self.version += 1
@@ -610,7 +613,8 @@ def make_handler(site: Site):
             path = self.path.split("?")[0]
             if path == "/api/status":
                 target = read_json(site.out / ".pixpage" / "publish.json", {}).get("target")
-                return self.send_json(200, {"version": site.version, "editing": True, "published": target})
+                return self.send_json(200, {"version": site.version, "editing": True, "published": target,
+                                            "dropbox": dropbox_url(target) if target else None})
             if path.startswith("/.pixpage"):
                 return self.send_error(HTTPStatus.NOT_FOUND)
             return super().do_GET()
@@ -653,7 +657,7 @@ def make_handler(site: Site):
 
         def do_POST(self):
             path = self.path.split("?")[0]
-            if path not in ("/api/login", "/api/captions", "/api/gallery", "/api/delete"):
+            if path not in ("/api/login", "/api/captions", "/api/gallery", "/api/delete", "/api/dropbox"):
                 return self.send_json(404, {"error": "not found"})
             try:
                 length = int(self.headers.get("Content-Length") or 0)
@@ -673,6 +677,8 @@ def make_handler(site: Site):
                 return self.save_gallery(body)
             if path == "/api/delete":
                 return self.delete_item(body)
+            if path == "/api/dropbox":
+                return self.collect_dropbox()
             return self.save_caption(body)
 
         def save_caption(self, body: dict):
@@ -768,6 +774,40 @@ def make_handler(site: Site):
                     s3 = f"Removed locally, but S3 removal failed: {e}"
                 log(f"  {s3}")
             return self.send_json(200, {"ok": True, "s3": s3})
+
+        def collect_dropbox(self):
+            """Bring whatever is waiting in the album's S3 dropbox into the gallery."""
+            target = read_json(site.out / ".pixpage" / "publish.json", {}).get("target")
+            if not target:
+                return self.send_json(400, {"error": "This gallery has no S3 location yet. Publish it once "
+                                                     "(--publish s3://bucket/path) and its dropbox is created beside the site."})
+            if not site.dropbox_lock.acquire(blocking=False):
+                return self.send_json(409, {"error": "Already checking the dropbox."})
+            try:
+                found = collect_dropbox(site.builder.src, site.out, target)
+                if found["added"]:
+                    site.builder.build()
+                    site.bump()
+            except SystemExit as e:  # the AWS helpers exit on fatal errors; report instead
+                return self.send_json(502, {"error": str(e)})
+            finally:
+                site.dropbox_lock.release()
+
+            in_gallery = {it["name"] for it in read_json(site.out / "data" / "media.json", {"items": []})["items"]}
+            added = [name for name in found["added"] if name in in_gallery]
+            failed = len(found["added"]) - len(added)
+            count = lambda n, word: f"{n} {word}{'' if n == 1 else 's'}"  # noqa: E731
+            parts = [f"Added {count(len(added), 'new item')} from the dropbox." if added else f"Nothing new in {found['dropbox']}"]
+            if found["duplicates"]:
+                parts.append(f"{count(len(found['duplicates']), 'file')} already in the album, skipped.")
+            if failed:
+                parts.append(f"{count(failed, 'file')} downloaded but not shown (deleted from this gallery before, or unreadable).")
+            if found["other"]:
+                parts.append(f"{count(found['other'], 'file')} left in the dropbox: not a photo or video.")
+            if found["error"]:
+                parts.append(f"S3 reported a problem: {found['error']}")
+            log(f"dropbox: {' '.join(parts)}")
+            return self.send_json(200, {"ok": True, "added": added, "message": " ".join(parts)})
 
     return Handler
 
@@ -903,6 +943,69 @@ def cloudfront_targets(bucket: str, prefix: str) -> list[tuple[str, str, str]]:
     return found
 
 
+def dropbox_key(prefix: str) -> str:
+    return f"{prefix}/{DROPBOX}/".lstrip("/")
+
+
+def dropbox_url(target: str) -> str:
+    bucket, prefix = parse_s3_url(target)
+    return f"s3://{bucket}/{dropbox_key(prefix)}"
+
+
+def ensure_dropbox(bucket: str, prefix: str, region: str) -> None:
+    """Create the empty dropbox/ key, so the folder is there in the S3 console to upload into."""
+    where = ["--bucket", bucket, "--key", dropbox_key(prefix), "--region", region]
+    if aws("s3api", "head-object", *where, check=False).returncode != 0:
+        res = aws("s3api", "put-object", *where, check=False)
+        if res.returncode != 0:
+            sys.exit(f"Can't create the dropbox: {res.stderr.strip()}")
+
+
+def collect_dropbox(src: Path, out: Path, target: str) -> dict:
+    """Move new originals from the album's S3 dropbox into the source folder.
+
+    Whatever is in the dropbox is new: `aws s3 mv` deletes each file from S3 once it has been
+    downloaded, so nothing is ever collected twice. Files that are not photos or videos are
+    left where they are."""
+    if not shutil.which("aws"):
+        sys.exit("The AWS CLI is required for the dropbox (brew install awscli).")
+    bucket, prefix = parse_s3_url(target)
+    region = bucket_region(bucket)
+    key = dropbox_key(prefix)
+    url = f"s3://{bucket}/{key}"
+    ensure_dropbox(bucket, prefix, region)
+
+    # Downloads land here first; anything left by an interrupted run is picked up as well.
+    incoming = out / ".pixpage" / "dropbox-incoming"
+    incoming.mkdir(parents=True, exist_ok=True)
+    # aws patterns are case-sensitive: "*.[hH][eE][iI][cC]" takes .heic and .HEIC alike.
+    any_case = lambda ext: "".join(f"[{c}{c.upper()}]" if c.isalpha() else c for c in ext)  # noqa: E731
+    wanted = [arg for ext in sorted(PHOTO_EXTS | VIDEO_EXTS) for arg in ("--include", f"*{any_case(ext)}")]
+    res = aws("s3", "mv", url, str(incoming), "--recursive", "--region", region, "--no-progress",
+              "--exclude", "*", *wanted, "--exclude", ".*", "--exclude", "*/.*", check=False)
+    error = (res.stderr.strip().splitlines() or ["download failed"])[-1] if res.returncode != 0 else None
+
+    added, duplicates = [], []
+    for f in sorted(p for p in incoming.rglob("*") if p.is_file() and media_kind(p)):
+        dest, n = src / f.name, 1
+        while dest.exists():
+            if filecmp.cmp(dest, f, shallow=False):
+                break
+            n += 1
+            dest = src / f"{f.stem}-{n}{f.suffix}"  # same name, different picture: keep both
+        if dest.exists():
+            duplicates.append(f.name)
+            f.unlink()
+        else:
+            shutil.move(f, dest)
+            added.append(dest.name)
+    shutil.rmtree(incoming, ignore_errors=True)
+
+    listing = aws_json("s3api", "list-objects-v2", "--bucket", bucket, "--prefix", key, "--region", region)
+    other = sum(1 for obj in (listing or {}).get("Contents", []) or [] if not obj["Key"].endswith("/"))
+    return {"dropbox": url, "added": added, "duplicates": duplicates, "other": other, "error": error}
+
+
 def unpublish_item(out: Path, target: str, outputs: list[str]) -> str:
     """Remove one item from a published site without publishing anything else."""
     bucket, prefix = parse_s3_url(target)
@@ -948,6 +1051,8 @@ def publish(out: Path, target: str) -> None:
     up, _ = sync(out, dst, region, acl, *common, "--exclude", "media/*", "--exclude", "fonts/*",
                  "--exclude", ".pixpage/*", "--cache-control", "no-cache")
     log(f"  site    {up} uploaded (page, app, data, assets)")
+    ensure_dropbox(bucket, prefix, region)
+    log(f"  dropbox s3://{bucket}/{dropbox_key(prefix)}  (upload new photos here, then click Check dropbox)")
 
     if aws_json("s3api", "get-bucket-website", "--bucket", bucket, "--region", region) is not None:
         host = f"s3-website-{region}" if region in WEBSITE_DASH_REGIONS else f"s3-website.{region}"

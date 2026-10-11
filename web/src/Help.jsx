@@ -171,6 +171,15 @@ export function HelpDrawer({ open, section, onClose }) {
           </p>
         </Section>
 
+        <Section id="dropbox" title="New photos from the S3 dropbox">
+          <ul>
+            <li>A published gallery has a <b>dropbox</b>: the <Code>dropbox/</Code> key beside the site in S3. Upload new photos or videos there.</li>
+            <li>With editing unlocked, click <b>Check dropbox</b> next to the Photos heading. Each file is downloaded into the source folder, removed from the dropbox and added to the gallery.</li>
+            <li>A file already in the album is skipped. Files that are not photos or videos stay in the dropbox.</li>
+            <li>The new photos are local until you publish again.</li>
+          </ul>
+        </Section>
+
         <Divider sx={{ my: 4 }} />
         <Section id="keys" title="Keyboard shortcuts">
           <Table rows={KEYS} />

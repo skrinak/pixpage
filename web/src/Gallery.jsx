@@ -16,6 +16,7 @@ import Close from '@mui/icons-material/Close';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined';
 import SmartDisplayOutlined from '@mui/icons-material/SmartDisplayOutlined';
+import CloudDownloadOutlined from '@mui/icons-material/CloudDownloadOutlined';
 import { Print, VideoBadge, fit } from './Print.jsx';
 import { ColorModeButton, EditLock, HelpButton, barSx } from './Toolbar.jsx';
 import { HeaderMarkdown } from './Header.jsx';
@@ -175,7 +176,7 @@ function Card({ item, route, editing, onEdit, onDelete }) {
   );
 }
 
-export default function Gallery({ title, header, headerVars, onEditHeader, videos: linked, onEditVideos, onHelp, allItems, items, keywordCounts, route, api, editing, onUnlock, onLock, onEdit, onDelete, focusId }) {
+export default function Gallery({ title, header, headerVars, onEditHeader, videos: linked, onEditVideos, collecting, onCollect, onHelp, allItems, items, keywordCounts, route, api, editing, onUnlock, onLock, onEdit, onDelete, focusId }) {
   const setRoute = (patch) => navigate({ view: 'gallery', q: route.q, t: route.t, k: route.k, ...patch }, { replace: true });
   const focusIndex = focusId ? items.findIndex((it) => it.id === focusId) : -1;
   const [limit, setLimit] = useState(Math.max(PAGE, focusIndex + PAGE));
@@ -261,9 +262,18 @@ export default function Gallery({ title, header, headerVars, onEditHeader, video
         )}
         <VideoSection videos={linked} editing={editing} onEdit={onEditVideos} />
         {/* #photos lands here rather than on the grid, so the tag filter stays in view. */}
-        <Typography id="photos" variant="h5" component="h2" sx={{ mt: { xs: 5, md: 7 } }}>
-          Photos
-        </Typography>
+        <Box id="photos" sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: { xs: 5, md: 7 } }}>
+          <Typography variant="h5" component="h2">
+            Photos
+          </Typography>
+          {editing && (
+            <Tooltip title={api?.dropbox ? `Bring in new photos uploaded to ${api.dropbox}` : 'Publish this gallery once to get an S3 dropbox'}>
+              <Button size="small" variant="outlined" startIcon={<CloudDownloadOutlined />} onClick={onCollect} loading={collecting} loadingPosition="start" sx={{ bgcolor: 'background.paper' }}>
+                Check dropbox
+              </Button>
+            </Tooltip>
+          )}
+        </Box>
         {cloud.length > 0 && (
           <Typography component="div" variant="body2" sx={{ mt: 2, mb: 1.25, color: 'text.secondary' }}>
             <Box component="span" sx={{ fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '0.72rem', mr: 1 }}>

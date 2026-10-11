@@ -10,7 +10,7 @@ import { DeleteDialog, EditDialog, LoginDialog } from './Dialogs.jsx';
 import { HeaderDialog } from './Header.jsx';
 import { HelpDrawer } from './Help.jsx';
 import { VideosDialog } from './Videos.jsx';
-import { apiStatus, deleteItem, loadGallery, login, saveCaption, saveGallery, session } from './api.js';
+import { apiStatus, collectDropbox, deleteItem, loadGallery, login, saveCaption, saveGallery, session } from './api.js';
 import { filterItems, formatRange, haystack } from './util.js';
 import { DEFAULT_HEADER, fillPlaceholders, firstHeading } from './markdown.js';
 import { navigate, useRoute } from './route.js';
@@ -38,14 +38,16 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [headerOpen, setHeaderOpen] = useState(false);
   const [videosOpen, setVideosOpen] = useState(false);
+  const [collecting, setCollecting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [help, setHelp] = useState(null); // null = closed, otherwise the section to show
   const lastDetail = useRef(null);
   const version = useRef(null);
 
-  const refresh = useCallback(async (announce) => {
+  // announce: toast about added or removed items. fresh: re-fetch rather than use the data the page came with.
+  const refresh = useCallback(async (announce, fresh = announce) => {
     try {
-      const next = await loadGallery(announce);
+      const next = await loadGallery(fresh);
       setData((prev) => {
         if (announce && prev) {
           const added = next.media.items.length - prev.media.items.length;
@@ -185,6 +187,20 @@ export default function App() {
       setToast(res.s3 ? `Deleted. ${res.s3}` : 'Deleted');
     });
 
+  // New originals waiting in the album's S3 dropbox: download them and show them.
+  const doCollect = async () => {
+    setCollecting(true);
+    try {
+      const res = await authed(() => collectDropbox(password));
+      if (res.added.length) await refresh(false, true);
+      setToast(res.message);
+    } catch (e) {
+      setToast(e.message || 'Could not check the dropbox');
+    } finally {
+      setCollecting(false);
+    }
+  };
+
   // "?" opens help wherever editing is possible.
   useEffect(() => {
     const onKey = (e) => {
@@ -252,6 +268,8 @@ export default function App() {
         onEditHeader={() => setHeaderOpen(true)}
         videos={videos}
         onEditVideos={() => setVideosOpen(true)}
+        collecting={collecting}
+        onCollect={doCollect}
         allItems={items}
         items={filtered}
         keywordCounts={keywordCounts}
@@ -290,7 +308,7 @@ export default function App() {
       <Snackbar
         open={Boolean(toast)}
         message={toast}
-        autoHideDuration={toast?.startsWith('Deleted') ? 6000 : 2600}
+        autoHideDuration={toast?.startsWith('Deleted') ? 6000 : toast?.length > 50 ? 9000 : 2600}
         onClose={() => setToast(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       />

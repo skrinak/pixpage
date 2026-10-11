@@ -61,6 +61,8 @@ export const saveGallery = (password, gallery) => post('api/gallery', gallery, p
 
 export const deleteItem = (password, id) => post('api/delete', { id }, password);
 
+export const collectDropbox = (password) => post('api/dropbox', {}, password);
+
 export const session = {
   get(key) {
     try {

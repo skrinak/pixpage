@@ -14,6 +14,7 @@ uv run pixpage.py ~/Pictures/Oct6
 - A Markdown header for the event, with a description and keywords for every photo.
 - Detail pages with previous/next, keyboard and swipe navigation.
 - Picks up new photos or videos dropped into the folder within seconds.
+- Collects new photos uploaded to an S3 dropbox with one click.
 
 ---
 
@@ -210,6 +211,74 @@ a photo page. After you confirm:
   (with its old caption) and skipped by every later build. To restore it, delete its entry
   there and re-run pixpage.
 
+### 7. Add new photos through the S3 dropbox
+
+The dropbox is a folder in S3 where new photos wait to be added to an album. Upload photos
+there from any device, then click one button to bring them into the gallery. Anything in the
+dropbox is new: a file is removed from it the moment it has been collected.
+
+**Where it is.** The `dropbox/` folder beside the published site. For an album published to
+`s3://<bucket>/Websites/Oct6`, the dropbox is:
+
+```
+s3://<bucket>/Websites/Oct6/dropbox/
+```
+
+The exact address is shown when you hover over the **Check dropbox** button.
+
+**Before you start.** The album must have been published once (`--publish s3://…`), which
+creates its dropbox, and the pixpage server must be running:
+
+```sh
+uv run pixpage.py ~/Pictures/Oct6
+```
+
+**Step 1. Upload the new photos to the dropbox.** Use either:
+
+- **The S3 console:** open the bucket, go to `Websites/Oct6/dropbox/`, click **Upload**, add
+  the files and click **Upload** again.
+- **The AWS CLI:**
+
+  ```sh
+  # one photo
+  aws s3 cp ~/Desktop/IMG_4001.HEIC s3://<bucket>/Websites/Oct6/dropbox/
+
+  # a whole folder
+  aws s3 cp ~/Desktop/new-photos s3://<bucket>/Websites/Oct6/dropbox/ --recursive
+  ```
+
+Photos and videos in any [supported format](#supported-formats) are accepted, and files inside
+subfolders of the dropbox are collected too.
+
+**Step 2. Collect them.** Open <http://127.0.0.1:8000/>, unlock editing (the lock icon), and
+click **Check dropbox** next to the **Photos** heading. The button spins while it works. A
+message at the bottom of the page then says what happened:
+
+| Message | Meaning |
+| --- | --- |
+| *Added 3 new items from the dropbox.* | The photos are in the gallery, in date order. |
+| *Nothing new in s3://…/dropbox/* | The dropbox is empty. Check that the upload went to this address. |
+| *1 file already in the album, skipped.* | An identical file was already in the source folder. It was removed from the dropbox and not added twice. |
+| *1 file left in the dropbox: not a photo or video.* | Unsupported files are never downloaded or deleted. Remove them from S3 yourself. |
+| *1 file downloaded but not shown…* | The photo was [deleted from this gallery](#6-delete-a-photo-or-video) earlier, or the file is unreadable. See the server log. |
+
+**Step 3. Publish.** The new photos are on your computer only. To put them on the live site:
+
+```sh
+uv run pixpage.py ~/Pictures/Oct6 --publish
+```
+
+**What happens to the files**
+
+- Each collected file is moved from the dropbox into the source folder (`~/Pictures/Oct6`),
+  under its own name. From then on it is an ordinary photo in the album: describe it, tag it or
+  delete it like any other.
+- **Once collected, the file is gone from S3.** The copy in the source folder is the only one,
+  so keep that folder backed up.
+- A different picture whose file name is already taken is kept under a new name, such as
+  `IMG_4001-2.HEIC`. Nothing in the source folder is ever overwritten.
+- `--publish` never uploads, changes or deletes anything in the dropbox.
+
 ### Help panel
 
 The **?** button (or the `?` key) opens a help panel with these instructions, a Markdown
@@ -266,6 +335,8 @@ What `--publish` does:
 - **Prints the S3 website URL** if website hosting is enabled.
 - **Refreshes CloudFront:** every enabled distribution whose origin is the bucket is invalidated
   for the gallery's path, and its `https://` URL is printed.
+- **Creates the dropbox:** the empty `dropbox/` key beside the site, for
+  [new photos](#7-add-new-photos-through-the-s3-dropbox). Nothing in it is ever published or deleted by `--publish`.
 - **Remembers the target** in `.pixpage/publish.json`, so later runs only need `--publish`.
 
 Only changed files are uploaded, so re-publishing is quick and resumes interrupted uploads.
@@ -343,6 +414,7 @@ Safari requires for video, and marks `index.html` and `data/` as `no-store`. The
 | `POST /api/captions` | `{id, description, keywords[]}` | Saves one item's caption |
 | `POST /api/gallery` | `{header}` | Saves the Markdown header (empty = default) |
 | `POST /api/delete` | `{id}` | Removes an item from the gallery (and from S3 if published) |
+| `POST /api/dropbox` | — | Moves new originals from the S3 dropbox into the source folder and rebuilds |
 
 POST requests carry the password in an `X-Pixpage-Password` header. It is compared in constant
 time, and wrong attempts are delayed. Limits: descriptions and the header up to 20,000
@@ -406,6 +478,8 @@ The next `uv run pixpage.py …` copies the new bundle into the site.
 - **Location:** `data/media.json` includes the GPS coordinates of photos that have them, and the
   detail page links to a map. Consider this before publishing photos taken at home.
 - **Unlisted, not private:** a published site can be viewed by anyone who has the URL.
+- **The dropbox is as public as the bucket:** if the bucket policy makes every object readable,
+  originals waiting in `dropbox/` (with their GPS data) are readable too until they are collected.
 - **Local only:** the edit API listens only on `127.0.0.1`. The password is never written into
   the site.
 
@@ -418,6 +492,9 @@ The next `uv run pixpage.py …` copies the new bundle into the site.
 | `editing locked: no password (… ParameterNotFound)` | Set the password with `aws ssm put-parameter` (see [Editing](#editing)). |
 | No lock icon | Editing needs the local server. Pages opened from disk or S3 are read-only. |
 | “The edit password changed — unlock again” | The password was rotated; unlock with the new one. |
+| No **Check dropbox** button | Unlock editing first; the button is next to the **Photos** heading. |
+| “This gallery has no S3 location yet” | Publish once with `--publish s3://bucket/path`; that creates the dropbox. |
+| **Check dropbox** says *Nothing new* after an upload | The files went somewhere else. Hover over the button for the exact dropbox address and upload there. |
 | `ffmpeg/ffprobe not found — videos are skipped` | `brew install ffmpeg`, then re-run. |
 | `… was built from …, not …` | Two source folders share a name; rename one. Each site is tied to its source. |
 | `… exists and wasn't made by pixpage` | pixpage won't overwrite an existing, unrelated folder in `~/Documents/Websites`. |
