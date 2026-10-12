@@ -19,7 +19,7 @@ import SmartDisplayOutlined from '@mui/icons-material/SmartDisplayOutlined';
 import CloudDownloadOutlined from '@mui/icons-material/CloudDownloadOutlined';
 import { Print, VideoBadge, fit } from './Print.jsx';
 import { ColorModeButton, EditLock, HelpButton, barSx } from './Toolbar.jsx';
-import { HeaderMarkdown } from './Header.jsx';
+import { HeaderMarkdown, scrollToElement } from './Header.jsx';
 import { VideoSection } from './Videos.jsx';
 import { buildHash, navigate } from './route.js';
 import { tilt } from './util.js';
@@ -29,7 +29,7 @@ const THUMB_W = 360;
 const THUMB_H = 240;
 const PAGE = 60;
 
-function SearchField({ value, onChange }) {
+function SearchField({ value, onChange, count }) {
   const ref = useRef(null);
   useEffect(() => {
     const onKey = (e) => {
@@ -64,11 +64,19 @@ function SearchField({ value, onChange }) {
         inputRef={ref}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => e.key === 'Escape' && onChange('')}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onChange('');
+          if (e.key === 'Enter') onChange(value);
+        }}
         placeholder="Search descriptions & keywords"
         sx={{ flex: 1, fontSize: 14 }}
         slotProps={{ input: { 'aria-label': 'Search', enterKeyHint: 'search' } }}
       />
+      {value && (
+        <Typography variant="caption" noWrap aria-live="polite" sx={{ color: 'text.secondary', flexShrink: 0 }}>
+          {count}
+        </Typography>
+      )}
       {value && (
         <IconButton size="small" onClick={() => onChange('')} aria-label="Clear search">
           <Close fontSize="small" />
@@ -178,6 +186,12 @@ function Card({ item, route, editing, onEdit, onDelete }) {
 
 export default function Gallery({ title, header, headerVars, onEditHeader, videos: linked, onEditVideos, collecting, onCollect, onHelp, allItems, items, keywordCounts, route, api, editing, onUnlock, onLock, onEdit, onDelete, focusId }) {
   const setRoute = (patch) => navigate({ view: 'gallery', q: route.q, t: route.t, k: route.k, ...patch }, { replace: true });
+  // The header and videos can fill the screen, so a search brings its results into view.
+  const search = (q) => {
+    setRoute({ q });
+    const el = q.trim() && document.getElementById('photos');
+    if (el && Math.abs(el.getBoundingClientRect().top - parseFloat(getComputedStyle(el).scrollMarginTop)) > 1) scrollToElement(el);
+  };
   const focusIndex = focusId ? items.findIndex((it) => it.id === focusId) : -1;
   const [limit, setLimit] = useState(Math.max(PAGE, focusIndex + PAGE));
   const sentinel = useRef(null);
@@ -221,7 +235,7 @@ export default function Gallery({ title, header, headerVars, onEditHeader, video
             {title}
           </Typography>
           <Box sx={{ order: { xs: 3, sm: 0 }, width: { xs: '100%', sm: 'auto' } }}>
-            <SearchField value={route.q} onChange={(q) => setRoute({ q })} />
+            <SearchField value={route.q} onChange={search} count={`${items.length} of ${allItems.length}`} />
           </Box>
           {photos > 0 && videos > 0 && (
             <ToggleButtonGroup

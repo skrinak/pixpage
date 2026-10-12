@@ -89,6 +89,10 @@ function scrollToAnchor(e) {
   const el = document.getElementById(decodeURIComponent(href.slice(1)));
   if (!el) return;
   e.preventDefault();
+  scrollToElement(el);
+}
+
+export function scrollToElement(el) {
   const instant = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || document.visibilityState !== 'visible';
   el.scrollIntoView({ behavior: instant ? 'auto' : 'smooth', block: 'start' });
 }

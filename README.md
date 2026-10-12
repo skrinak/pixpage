@@ -87,7 +87,8 @@ Given the folder of media, the script:
   photos on a table. Hovering straightens and lifts it. The first two lines of the description
   appear underneath. Videos show a ▶ badge with their duration.
 - **Search:** covers descriptions, keywords, file names, dates and camera names. Every word must
-  match, and `"quoted phrases"` stay together.
+  match, and `"quoted phrases"` stay together. As you type, the page jumps to the matching photos
+  and the search field shows how many there are.
 - **Photos / Videos toggle:** appears when the gallery has both.
 - **Theme:** light, dark or follow the system.
 

@@ -46,7 +46,9 @@ export const theme = createTheme({
   components: {
     MuiCssBaseline: {
       styleOverrides: (theme) => ({
-        html: { scrollPaddingTop: 96 },
+        // Anchors land below the sticky bar. A margin on the targets, not scroll-padding on the page:
+        // padding also makes the browser scroll up on every keystroke in the bar's search field.
+        ':where([id])': { scrollMarginTop: 96 },
         body: {
           minHeight: '100vh',
           backgroundColor: '#d3dce2',

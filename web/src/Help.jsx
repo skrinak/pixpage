@@ -157,6 +157,7 @@ export function HelpDrawer({ open, section, onClose }) {
         <Section id="search" title="Search">
           <ul>
             <li>Search looks through descriptions, keywords, file names, dates and camera names. Every word must match.</li>
+            <li>As you type, the page jumps to the matching photos and the search field shows how many there are.</li>
             <li>Put phrases in quotes: <Code>"demo day"</Code>.</li>
             <li>Click a tag above the photos to show only photos with that tag. Selecting more tags adds their photos too (a photo with <i>any</i> selected tag is shown); click a tag again to remove it.</li>
             <li>Tags and search combine: with tags selected, the search words narrow the tagged photos.</li>
